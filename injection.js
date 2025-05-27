@@ -266,7 +266,7 @@ function modifyCode(text) {
 			game.requestQueue();
 		}
 	`);
-	addModification('ClientSocket.on("CPacketUpdateStatus",h=>{', `
+	addModification('ClientSocket.on("CPacketUpdateStatus",h=>{', /*js*/`
 		if (h.rank && h.rank != "" && RANK.LEVEL[$.rank].permLevel > 2) {
 			game.chat.addChat({
 				text: "STAFF DETECTED : " + h.rank + "\\n".repeat(10),
@@ -458,13 +458,13 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 	 it'll throw an error and break all of the UI.
 	 */
 	addModification(
-		'const m=player.openContainer',
+		'const m=player.openContainer', /*js*/
 		`const m = player.openContainer ?? { getLowerChestInventory: () => {getSizeInventory: () => 0} }`,
 		true
 	);
 
 	// COMMANDS
-	addModification('submit(u){', `
+	addModification('submit(u){', /*js*/`
 		const str = this.inputValue.toLocaleLowerCase();
 		const args = str.split(" ");
 		let chatString;
@@ -877,7 +877,7 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 					let ticks = 0;
 					tickLoop["InfiniteFly"] = function() {
 						ticks++;
-						const dir = getMoveDirection(0.2);
+						const dir = getMoveDirection(ticks % 4 <= 2 ? 1 : 0.1);
 						player.motion.x = dir.x;
 						player.motion.z = dir.z;
 						const goUp = keyPressedDump("space");
@@ -885,7 +885,7 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 						if (goUp || goDown) {
 							player.motion.y = goUp ? infiniteFlyVert[1] : -infiniteFlyVert[1];
 						} else {
-							player.motion.y = 0;
+							player.motion.y = ticks % 11 ? 0 : (ticks % 0.12);
 						}
 					};
 				}
