@@ -172,6 +172,23 @@ function modifyCode(text) {
 		player.setPositionAndRotation(h.x,h.y,h.z,h.yaw,h.pitch),
 	`, true);
 
+
+	// PREDICTION AC FIXER (make the ac a bit less annoying (e.g. when scaffolding))
+	// ig but this should be done in the desync branch instead lol
+// 	addModification("if(h.reset){this.setPosition(h.x,h.y,h.z),this.reset();return}", "", true);
+// 	addModification("this.serverDistance=y", `
+// if (h.reset) {
+// 	if (this.serverDistance >= 4) {
+// 		this.setPosition(h.x, h.y, h.z);
+// 	} else {
+// 		ClientSocket.sendPacket(new SPacketPlayerInput({sequenceNumber: NaN, pos: new PBVector3(g)}));
+// 		ClientSocket.sendPacket(new SPacketPlayerInput({sequenceNumber: NaN, pos: new PBVector3({x: h.x + 8, ...h})}));
+// 	}
+// 	this.reset();
+// 	return;
+// }
+// `);
+
 	addModification('COLOR_TOOLTIP_BG,BORDER_SIZE)}', `
 		function drawImage(ctx, img, posX, posY, sizeX, sizeY, color) {
 			if (color) {
@@ -286,6 +303,7 @@ function modifyCode(text) {
 	addModification('"CPacketEntityVelocity",h=>{const p=m.world.entitiesDump.get(h.id);', `
 		if (player && h.id == player.id && enabledModules["Velocity"]) {
 			if (velocityhori[1] == 0 && velocityvert[1] == 0) return;
+			ClientSocket.sendPacket(new SPacketPlayerInput({sequenceNumber: this.inputSequenceNumber++, pos: new PBVector3({y: g.y - 2, ...g})}));
 			h.motion = new Vector3$1($.motion.x * velocityhori[1], h.motion.y * velocityvert[1], h.motion.z * velocityhori[1]);
 		}
 	`);
@@ -344,7 +362,7 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 
 	// PHASE
 	addModification('calculateXOffset(A,this.getEntityBoundingBox(),g.x)', 'enabledModules["Phase"] ? g.x : calculateXOffset(A,this.getEntityBoundingBox(),g.x)', true);
-	addModification('calculateYOffset(A,this.getEntityBoundingBox(),g.y)', 'enabledModules["Phase"] && !enabledModules["Scaffold"] && keyPressedDump("shift") ? g.y : calculateYOffset(A,this.getEntityBoundingBox(),g.y)', true);
+	addModification('calculateYOffset(A,this.getEntityBoundingBox(),g.y)', 'enabledModules["Phase"] && !enabledModules["Scaffold"] && keyPressedDump("alt") ? g.y : calculateYOffset(A,this.getEntityBoundingBox(),g.y)', true);
 	addModification('calculateZOffset(A,this.getEntityBoundingBox(),g.z)', 'enabledModules["Phase"] ? g.z : calculateZOffset(A,this.getEntityBoundingBox(),g.z)', true);
 	addModification('pushOutOfBlocks(u,h,p){', 'if (enabledModules["Phase"]) return;');
 
