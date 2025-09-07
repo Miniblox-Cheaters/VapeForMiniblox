@@ -111,7 +111,6 @@ function modifyCode(text) {
 // note: when using desync,
 // your position will only update every 20 ticks.
 let serverPos = player.pos.clone();
-let inputPos = player.pos.clone();
 `);
 	addModification('Potions.jump.getId(),"5");', `
 		let blocking = false;
@@ -366,13 +365,10 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 	// addModification('0),this.sneak', ' && !enabledModules["NoSlowdown"]');
 
 	// DESYNC
-	addModification("game.info.inLoadedChunk&&(this.inputSequenceNumber++", 'game.info.inLoadedChunk && !desync && (this.inputSequenceNumber++', true);
-	addModification("new PBVector3({x:this.pos.x,y:this.pos.y,z:this.pos.z})", "desync ? inputPos : inputPos = this.pos", true);
+	addModification("this.inputSequenceNumber++", 'desync ? this.inputSequenceNumber : this.inputSequenceNumber++', true);
+	// addModification("new PBVector3({x:this.pos.x,y:this.pos.y,z:this.pos.z})", "desync ? inputPos : inputPos = this.pos", true);
+
 	// auto-reset desync variable.
-	// TODO: could there be a better system for this?
-	//       e.g. (`registerShouldDesync` or something
-	//            and if one of them are `true`
-	//            then don't resync?)
 	addModification("reconcileServerPosition(h){", "serverPos = h;");
 
 	// hook into reconcileServerPosition
