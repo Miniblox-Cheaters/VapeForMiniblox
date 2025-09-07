@@ -727,19 +727,20 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 						attacked++;
 						playerControllerMP.syncItemDump();
 
-						// if (true) {
-						// 	const offsets = [.51, .5, .49, -.49, 0];
-						// 	for (const offset of offsets) {
-						// 		const pos = {
-						// 			x: player.pos.x,
-						// 			y: player.pos.y + offset,
-						// 			z: player.pos.z
-						// 		};
-						// 		ClientSocket.sendPacket(new SPacketPlayerPosLook({
-						// 			pos
-						// 		}));
-						// 	}
-						// }
+						if (true) {
+							const offsets = [.51, .5, .49, -.49, 0];
+						 	for (const offset of offsets) {
+						 		const pos = {
+						 			x: player.pos.x,
+						 			y: player.pos.y + offset,
+						 			z: player.pos.z
+						 		};
+						 		ClientSocket.sendPacket(new SPacketPlayerPosLook({
+						 			pos: pos,
+									onGround: true
+						 		}));
+						 	}
+						 }
 
 						ClientSocket.sendPacket(new SPacketUseEntity({
 							id: entity.id,
