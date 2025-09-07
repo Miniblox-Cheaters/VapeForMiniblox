@@ -367,13 +367,13 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 
 	// DESYNC
 	addModification("game.info.inLoadedChunk&&(this.inputSequenceNumber++", 'game.info.inLoadedChunk && !desync && (this.inputSequenceNumber++', true);
-	addModification("new PBVector3({x:this.pos.x,y:this.pos.y,z:this.pos.z})", "desync ? inputPos : inputPos = this.pos;", true);
+	addModification("new PBVector3({x:this.pos.x,y:this.pos.y,z:this.pos.z})", "desync ? inputPos : inputPos = this.pos", true);
 	// auto-reset desync variable.
 	// TODO: could there be a better system for this?
 	//       e.g. (`registerShouldDesync` or something
 	//            and if one of them are `true`
 	//            then don't resync?)
-	addModification("reconcileServerPosition(h){", "serverPos = h; desync = false;");
+	addModification("reconcileServerPosition(h){", "serverPos = h;");
 
 	// hook into reconcileServerPosition
 	// so we know our server pos
@@ -923,8 +923,10 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 						player.motion.z = Math.max(Math.min(player.motion.z, 0.3), -0.3);
 					}
 					delete tickLoop["Fly"];
+					desync = false;
 					return;
 				}
+				desync = true;
 				tickLoop["Fly"] = function() {
 					const dir = getMoveDirection(flyvalue[1]);
 					player.motion.x = dir.x;
