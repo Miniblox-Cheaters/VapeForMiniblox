@@ -574,7 +574,7 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 				}
 				return this.closeInput();
 		}
-		if (enabledModules["FilterBypass"] && !this.inputValue.startsWith('/')) {
+		if (enabledModules["FilterBypass"] && !this.isInputCommandMode) {
 			const words = this.inputValue.split(" ");
 			let newwords = [];
 			for(const word of words) newwords.push(word.charAt(0) + '\\\\' + word.slice(1));
