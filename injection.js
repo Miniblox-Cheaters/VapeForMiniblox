@@ -21,11 +21,11 @@ function replaceAndCopyFunction(oldFunc, newFunc) {
 	});
 }
 
-Object.getOwnPropertyNames = replaceAndCopyFunction(Object.getOwnPropertyNames, function(list) {
+Object.getOwnPropertyNames = replaceAndCopyFunction(Object.getOwnPropertyNames, function (list) {
 	if (list.indexOf(storeName) != -1) list.splice(list.indexOf(storeName), 1);
 	return list;
 });
-Object.getOwnPropertyDescriptors = replaceAndCopyFunction(Object.getOwnPropertyDescriptors, function(list) {
+Object.getOwnPropertyDescriptors = replaceAndCopyFunction(Object.getOwnPropertyDescriptors, function (list) {
 	delete list[storeName];
 	return list;
 });
@@ -50,10 +50,10 @@ function addDump(replacement, code) {
  */
 function modifyCode(text) {
 	let modifiedText = text;
-	for(const [name, regex] of Object.entries(dumpedVarNames)) {
+	for (const [name, regex] of Object.entries(dumpedVarNames)) {
 		const matched = modifiedText.match(regex);
 		if (matched) {
-			for(const [replacement, code] of Object.entries(replacements)){
+			for (const [replacement, code] of Object.entries(replacements)) {
 				delete replacements[replacement];
 				replacements[replacement.replaceAll(name, matched[1])] = [code[0].replaceAll(name, matched[1]), code[1]];
 			}
@@ -65,7 +65,7 @@ function modifyCode(text) {
 	const unmatchedReplacements = Object.entries(replacements).filter(r => modifiedText.replace(r[0]) === text);
 	if (unmatchedReplacements.length > 0) console.warn("Unmatched replacements:", unmatchedReplacements);
 
-	for(const [replacement, code] of Object.entries(replacements)) {
+	for (const [replacement, code] of Object.entries(replacements)) {
 		modifiedText = modifiedText.replace(replacement, code[1] ? code[0] : replacement + code[0]);
 		// TODO: handle the 2nd occurrence, which inside a string in a varible called "jsContent".
 		// (screw you vector)
@@ -81,7 +81,7 @@ function modifyCode(text) {
 	newScript.remove();
 }
 
-(function() {
+(function () {
 	'use strict';
 
 	// DUMPING
@@ -111,6 +111,7 @@ function modifyCode(text) {
 		let blocking = false;
 		let sendYaw = false;
 		let sendY = false;
+		let sendGround;
 		let breakStart = Date.now();
 		let noMove = Date.now();
 
@@ -175,19 +176,19 @@ function modifyCode(text) {
 
 	// PREDICTION AC FIXER (make the ac a bit less annoying (e.g. when scaffolding))
 	// ig but this should be done in the desync branch instead lol
-// 	addModification("if(h.reset){this.setPosition(h.x,h.y,h.z),this.reset();return}", "", true);
-// 	addModification("this.serverDistance=y", `
-// if (h.reset) {
-// 	if (this.serverDistance >= 4) {
-// 		this.setPosition(h.x, h.y, h.z);
-// 	} else {
-// 		ClientSocket.sendPacket(new SPacketPlayerInput({sequenceNumber: NaN, pos: new PBVector3(g)}));
-// 		ClientSocket.sendPacket(new SPacketPlayerInput({sequenceNumber: NaN, pos: new PBVector3({x: h.x + 8, ...h})}));
-// 	}
-// 	this.reset();
-// 	return;
-// }
-// `);
+	// 	addModification("if(h.reset){this.setPosition(h.x,h.y,h.z),this.reset();return}", "", true);
+	// 	addModification("this.serverDistance=y", `
+	// if (h.reset) {
+	// 	if (this.serverDistance >= 4) {
+	// 		this.setPosition(h.x, h.y, h.z);
+	// 	} else {
+	// 		ClientSocket.sendPacket(new SPacketPlayerInput({sequenceNumber: NaN, pos: new PBVector3(g)}));
+	// 		ClientSocket.sendPacket(new SPacketPlayerInput({sequenceNumber: NaN, pos: new PBVector3({x: h.x + 8, ...h})}));
+	// 	}
+	// 	this.reset();
+	// 	return;
+	// }
+	// `);
 
 	addModification('COLOR_TOOLTIP_BG,BORDER_SIZE)}', `
 		function drawImage(ctx, img, posX, posY, sizeX, sizeY, color) {
@@ -339,6 +340,9 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 	addModification('S&&!this.isUsingItem()', 'S&&!(this.isUsingItem() && !enabledModules["NoSlowdown"])', true);
 	// TODO: fix this
 	// addModification('0),this.sneak', ' && !enabledModules["NoSlowdown"]');
+
+	// GROUND SPOOF
+	addModification('={onGround:this.onGround}', '={onGround:sendGround !== undefined ? sendGround : this.onGround}', true);
 
 	// STEP
 	addModification('p.y=this.stepHeight;', 'p.y=(enabledModules["Step"]?Math.max(stepheight[1],this.stepHeight):this.stepHeight);', true);
@@ -727,8 +731,20 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 						attacked++;
 						playerControllerMP.syncItemDump();
 
-						if (true) {
-							const offsets = [.51, .5, .49, -.49, 0];
+						// this.fallDistance > 0
+						// && !this.onGround
+						// && !this.isOnLadder()
+						// && !this.inWater
+						// && attacked instanceof EntityLivingBase
+						// && this.ridingEntity == null
+
+						if (entity instanceof EntityLivingBase && !player.inWater
+							&& !player.isOnLadder()
+							&& player.ridingEntity == null) {
+							const offsets = [
+								0.49, 0.41159999848,
+								0.07840000152, -0.07840000152
+							];
 						 	for (const offset of offsets) {
 						 		const pos = {
 						 			x: player.pos.x,
@@ -736,8 +752,8 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 						 			z: player.pos.z
 						 		};
 						 		ClientSocket.sendPacket(new SPacketPlayerPosLook({
-						 			pos: pos,
-									onGround: true
+						 			pos,
+									onGround: false
 						 		}));
 						 	}
 						 }
@@ -905,33 +921,52 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 			flyvert = fly.addoption("Vertical", Number, 0.7);
 
 			// InfiniteFly
-			let infiniteFlyVert;
+			let infiniteFlyVert, infiniteFlyLessGlide;
+			let warned = false;
 			const infiniteFly = new Module("InfiniteFly", function(callback) {
 				if (callback) {
+					if (!warned) {
+					game.chat.addChat({text:
+						\`Infinite Fly only works on servers using the old ac
+(KitPvP, Skywars, Eggwars, Bridge Duels,
+Classic PvP, and OITQ use the new ac, everything else is using the old ac)\`});
+					}
 					let ticks = 0;
 					tickLoop["InfiniteFly"] = function() {
+						sendGround = undefined;
 						ticks++;
-						const dir = getMoveDirection(ticks % 4 <= 2 ? 1 : 0.1);
+						const dir = getMoveDirection(0.37);
 						player.motion.x = dir.x;
 						player.motion.z = dir.z;
 						const goUp = keyPressedDump("space");
 						const goDown = keyPressedDump("shift");
+						sendGround = true;
 						if (goUp || goDown) {
 							player.motion.y = goUp ? infiniteFlyVert[1] : -infiniteFlyVert[1];
-						} else {
-							player.motion.y = ticks % 11 ? 0 : (ticks % 0.12);
+						} else if (!infiniteFlyLessGlide[1] || ticks % 2 === 0) {
+							player.motion.y = 0.18;
 						}
 					};
 				}
 				else {
 					delete tickLoop["InfiniteFly"];
-					if (player) {
-						player.motion.x = Math.max(Math.min(player.motion.x, 0.3), -0.3);
-						player.motion.z = Math.max(Math.min(player.motion.z, 0.3), -0.3);
+					if (!infiniteFlyLessGlide[1]) return;
+					// due to us not constantly applying the motion y while flying,
+					// we can't instantly stop.
+					// we have to wait a few ticks before allowing the player to move.
+					let ticks = 0;
+					tickLoop["InfiniteFlyStop"] = function() {
+						if (player && ticks < 3) {
+							player.motion.y = 0.18;
+							ticks++;
+						} else {
+							delete tickLoop["InfiniteFlyStop"];
+						}
 					}
 				}
 			});
 			infiniteFlyVert = infiniteFly.addoption("Vertical", Number, 0.3);
+			infiniteFlyLessGlide = infiniteFly.addoption("LessGlide", Boolean, true);
 
 			new Module("InvWalk", function() {});
 			new Module("KeepSprint", function() {});
@@ -950,7 +985,11 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 						lastjump = player.onGround ? 0 : lastjump;
 						player.motion.x = dir.x;
 						player.motion.z = dir.z;
-						player.motion.y = player.onGround && dir.length() > 0 && speedauto[1] && !keyPressedDump("space") ? speedjump[1] : player.motion.y;
+						const doJump = player.onGround && dir.length() > 0 && speedauto[1] && !keyPressedDump("space");
+						if (doJump) {
+							player.jump();
+							player.motion.y = player.onGround && dir.length() > 0 && speedauto[1] && !keyPressedDump("space") ? speedjump[1] : player.motion.y;
+						}
 					};
 				}
 				else delete tickLoop["Speed"];
@@ -1219,19 +1258,19 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 	async function saveVapeConfig(profile) {
 		if (!loadedConfig) return;
 		let saveList = {};
-		for(const [name, module] of Object.entries(unsafeWindow.globalThis[storeName].modules)) {
-			saveList[name] = {enabled: module.enabled, bind: module.bind, options: {}};
-			for(const [option, setting] of Object.entries(module.options)) {
+		for (const [name, module] of Object.entries(unsafeWindow.globalThis[storeName].modules)) {
+			saveList[name] = { enabled: module.enabled, bind: module.bind, options: {} };
+			for (const [option, setting] of Object.entries(module.options)) {
 				saveList[name].options[option] = setting[1];
 			}
 		}
 		GM_setValue("vapeConfig" + (profile ?? unsafeWindow.globalThis[storeName].profile), JSON.stringify(saveList));
-		GM_setValue("mainVapeConfig", JSON.stringify({profile: unsafeWindow.globalThis[storeName].profile}));
+		GM_setValue("mainVapeConfig", JSON.stringify({ profile: unsafeWindow.globalThis[storeName].profile }));
 	};
 
 	async function loadVapeConfig(switched) {
 		loadedConfig = false;
-		const loadedMain = JSON.parse(await GM_getValue("mainVapeConfig", "{}")) ?? {profile: "default"};
+		const loadedMain = JSON.parse(await GM_getValue("mainVapeConfig", "{}")) ?? { profile: "default" };
 		unsafeWindow.globalThis[storeName].profile = switched ?? loadedMain.profile;
 		const loaded = JSON.parse(await GM_getValue("vapeConfig" + unsafeWindow.globalThis[storeName].profile, "{}"));
 		if (!loaded) {
@@ -1239,13 +1278,13 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 			return;
 		}
 
-		for(const [name, module] of Object.entries(loaded)) {
+		for (const [name, module] of Object.entries(loaded)) {
 			const realModule = unsafeWindow.globalThis[storeName].modules[name];
 			if (!realModule) continue;
 			if (realModule.enabled != module.enabled) realModule.toggle();
 			if (realModule.bind != module.bind) realModule.setbind(module.bind);
 			if (module.options) {
-				for(const [option, setting] of Object.entries(module.options)) {
+				for (const [option, setting] of Object.entries(module.options)) {
 					const realOption = realModule.options[option];
 					if (!realOption) continue;
 					realOption[1] = setting;
@@ -1268,12 +1307,12 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 
 	let loadedConfig = false;
 	async function execute(src, oldScript) {
-		Object.defineProperty(unsafeWindow.globalThis, storeName, {value: {}, enumerable: false});
+		Object.defineProperty(unsafeWindow.globalThis, storeName, { value: {}, enumerable: false });
 		if (oldScript) oldScript.type = 'javascript/blocked';
 		await fetch(src).then(e => e.text()).then(e => modifyCode(e));
 		if (oldScript) oldScript.type = 'module';
 		await new Promise((resolve) => {
-			const loop = setInterval(async function() {
+			const loop = setInterval(async function () {
 				if (unsafeWindow.globalThis[storeName].modules) {
 					clearInterval(loop);
 					resolve();
@@ -1285,7 +1324,7 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 		unsafeWindow.globalThis[storeName].exportVapeConfig = exportVapeConfig;
 		unsafeWindow.globalThis[storeName].importVapeConfig = importVapeConfig;
 		loadVapeConfig();
-		setInterval(async function() {
+		setInterval(async function () {
 			saveVapeConfig();
 		}, 10000);
 	}
@@ -1294,7 +1333,7 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 	// https://stackoverflow.com/questions/22141205/intercept-and-alter-a-sites-javascript-using-greasemonkey
 	if (publicUrl == "scripturl") {
 		if (navigator.userAgent.indexOf("Firefox") != -1) {
-			window.addEventListener("beforescriptexecute", function(e) {
+			window.addEventListener("beforescriptexecute", function (e) {
 				if (e.target.src.includes("https://miniblox.io/assets/index")) {
 					e.preventDefault();
 					e.stopPropagation();
