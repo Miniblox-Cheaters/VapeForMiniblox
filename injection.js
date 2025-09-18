@@ -115,6 +115,11 @@ function modifyCode(text) {
 		let breakStart = Date.now();
 		let noMove = Date.now();
 
+		// a list of miniblox usernames to not attack / ignore
+		/** @type string[] **/
+		const friends = [];
+		let ignoreFriends = false;
+
 		let enabledModules = {};
 		let modules = {};
 
@@ -278,7 +283,7 @@ function modifyCode(text) {
 	addModification('ClientSocket.on("CPacketDisconnect",h=>{', `
 		if (enabledModules["AutoRejoin"]) {
 			setTimeout(function() {
-				j.connect(lastJoined);
+				h.connect(lastJoined);
 			}, 400);
 		}
 	`);
@@ -353,8 +358,8 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 
 	// ANIMATIONS
 
-// UNCOMMENT FOR 1.7 BLOCKING EXPERIMENT (doesn't work)
-//	addModification("this.position.copy(swordBlockPos)", ",handleBlockingAnimation(this, g)");
+	// UNCOMMENT FOR 1.7 BLOCKING EXPERIMENT (doesn't work)
+	//	addModification("this.position.copy(swordBlockPos)", ",handleBlockingAnimation(this, g)");
 
 	// KILLAURA
 	addModification('else player.isBlocking()?', 'else (player.isBlocking() || blocking)?', true);
@@ -606,6 +611,41 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 					}
 				}
 				return this.closeInput();
+			case ".friend": {
+				const mode = args[1];
+				if (!mode) {
+					game.chat.addChat({text: "Usage: .friend <add|remove> <username> OR .friend list"});
+					return;
+				}
+				const name = args[2];
+				if (!name) {
+					game.chat.addChat({text: "Usage: .friend <add|remove> <username> OR .friend list"});
+					return;
+				}
+				switch (args[1]) {
+					case "add":
+						friends.push(name);
+						game.chat.addChat({text: \`\\\\green\\\\added\\\\reset\\\\ \${name} as a friend \`});
+						break;
+					case "remove": {
+						const idx = friends.indexOf(name);
+						if (idx === -1) {
+							game.chat.addChat({text:
+								\`\\\\red\\\\Unknown\\\\reset\\\\ friend: \${name}\`});
+							break;
+						}
+						friends.splice(idx, 1);
+						break;
+					}
+					case "list":
+						game.chat.addChat({text: "Friends:", color: "yellow"});
+						for (const friend of friends) {
+							game.chat.addChat({text: friend, color: "blue"});
+						}
+						break;
+				}
+				return this.closeInput();
+			}
 		}
 		if (enabledModules["FilterBypass"] && !this.isInputCommandMode) {
 			const words = this.inputValue.split(" ");
@@ -731,7 +771,6 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 			let didSwing = false;
 			let attacked = 0;
 			let attackedPlayers = {};
-			let attackList = [];
 			let boxMeshes = [];
 			let killaurarange, killaurablock, killaurabox, killauraangle, killaurawall, killauraitem;
 
@@ -767,9 +806,24 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 						// && attacked instanceof EntityLivingBase
 						// && this.ridingEntity == null
 
-						if (entity instanceof EntityLivingBase && !player.inWater
-							&& !player.isOnLadder()
-							&& player.ridingEntity == null) {
+						const couldCrit = player.ridingEntity == null && !player.inWater
+							&& !player.isOnLadder();
+						if (couldCrit) {
+							if (!player.onGround) {
+								// go a tiny bit down
+						 		ClientSocket.sendPacket(new SPacketPlayerPosLook({
+						 			pos: {
+										...player.pos,
+										y: player.pos.y - 1e-9
+									},
+									onGround: false
+						 		}));
+						 		ClientSocket.sendPacket(new SPacketPlayerPosLook({
+						 			pos: player.pos,
+									onGround: sendGround ?? player.onGround
+						 		}));
+								return;
+							}
 							const offsets = [
 								0.49, 0.41159999848,
 								0.07840000152, -0.07840000152
@@ -835,6 +889,12 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 				return entry.color != "white" ? entry.color : undefined;
 			}
 
+			new Module("NoFriends", function(enabled) {
+				ignoreFriends = enabled;
+			})
+
+			let killAuraAttackInvisible;
+			let attackList = [];
 			const killaura = new Module("Killaura", function(callback) {
 				if (callback) {
 					for(let i = 0; i < 10; i++) {
@@ -854,19 +914,33 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 						const localTeam = getTeam(player);
 						const entities = game.world.entitiesDump;
 
-						attackList = [];
-						if (!killauraitem[1] || swordCheck()) {
-							for (const entity of entities.values()) {
-								if (entity.id == player.id) continue;
-								const newDist = player.getDistanceSqToEntity(entity);
-								if (newDist < (killaurarange[1] * killaurarange[1]) && entity instanceof EntityPlayer) {
-									if (entity.mode.isSpectator() || entity.mode.isCreative() || entity.isInvisibleDump()) continue;
-									if (localTeam && localTeam == getTeam(entity)) continue;
-									if (killaurawall[1] && !player.canEntityBeSeen(entity)) continue;
-									attackList.push(entity);
-								}
-							}
-						}
+						const sqRange = killaurarange[1] * killaurarange[1];
+						const entities2 = Array.from(entities.values());
+						attackList = entities2.filter(e => {
+							console.log("hi");
+							const base = e instanceof EntityPlayer && e.id != player.id;
+							if (!base) return false;
+							const distCheck = player.getDistanceSqToEntity(e) < sqRange;
+							if (!distCheck) return false;
+							const isFriend = friends.includes(e.name);
+							console.log("ignoreFriends || !isFriend = ", ignoreFriends, " || ", !isFriend);
+							const friendCheck = ignoreFriends || !isFriend;
+							if (!friendCheck) return false;
+							// pasted
+							const {mode} = e;
+							if (mode.isSpectator() || mode.isCreative()) return false;
+							console.log("not in spectator or creative");
+							const invisCheck = killAuraAttackInvisible[1] || e.isInvisibleDump();
+							if (!invisCheck) return false;
+							console.log("attacking invisible players is enabled or the player isn't invisible");
+							const teamCheck = localTeam && localTeam == getTeam(e);
+							if (teamCheck) return false;
+							console.log("we aren't on the same team or we don't have a team in the 1st place");
+							const wallCheck = killaurawall[1] && !player.canEntityBeSeen(e);
+							if (wallCheck) return false;
+							console.log("we attack people through walls or they aren't behind a wall. Passed all checks!");
+							return true;
+						})
 
 						attackList.sort((a, b) => {
 							return (attackedPlayers[a.id] || 0) > (attackedPlayers[b.id] || 0) ? 1 : -1;
@@ -908,6 +982,7 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 			killaurawall = killaura.addoption("Wallcheck", Boolean, false);
 			killaurabox = killaura.addoption("Box", Boolean, true);
 			killauraitem = killaura.addoption("LimitToSword", Boolean, false);
+			killAuraAttackInvisible = killaura.addoption("AttackInvisbles", Boolean, true);
 
 			new Module("FastBreak", function() {});
 
