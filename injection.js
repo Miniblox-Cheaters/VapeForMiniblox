@@ -128,11 +128,35 @@ function modifyCode(text) {
 		let attackTime = Date.now();
 		let chatDelay = Date.now();
 
-		function getModule(str) {
-			for(const [name, module] of Object.entries(modules)) {
-				if (name.toLocaleLowerCase() == str.toLocaleLowerCase()) return module;
+		function getModule(s) {
+			for(const [n, m] of Object.entries(modules)) {
+				if (n.toLocaleLowerCase() == s.toLocaleLowerCase()) return m;
 			}
 		}
+// UNCOMMENT FOR 1.7 BLOCKING EXPERIMENT (doesn't work)
+/*
+		function applySwingOffset(matrix, swingProgress) {
+			const f = Math.sin(swingProgress * swingProgress * Math.PI);
+			const g = Math.sin(Math.sqrt(swingProgress) * Math.PI);
+
+			// Create temporary matrices for each rotation
+			const rotY1 = new Matrix4().makeRotationY(-1 * (45.0 + f * -20.0) * Math.PI / 180);
+			const rotZ = new Matrix4().makeRotationZ(-1 * g * -20.0 * Math.PI / 180);
+			const rotX = new Matrix4().makeRotationX(g * -80.0 * Math.PI / 180);
+			const rotY2 = new Matrix4().makeRotationY(-1 * -45.0 * Math.PI / 180);
+			console.log("swing progress:", swingProgress);
+
+			// Apply rotations in the same order as the original code
+			matrix.multiply(rotY1);
+			matrix.multiply(rotZ);
+			matrix.multiply(rotX);
+			matrix.multiply(rotY2);
+		}
+
+		function handleBlockingAnimation(h3d, swingProgress) {
+			applySwingOffset(h3d.position, swingProgress);
+		}
+*/
 
 		let j;
 		for (j = 0; j < 26; j++) keybindList[j + 65] = keybindList["Key" + String.fromCharCode(j + 65)] = String.fromCharCode(j + 97);
@@ -326,6 +350,11 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 			}
 		}
 	`, true);
+
+	// ANIMATIONS
+
+// UNCOMMENT FOR 1.7 BLOCKING EXPERIMENT (doesn't work)
+//	addModification("this.position.copy(swordBlockPos)", ",handleBlockingAnimation(this, g)");
 
 	// KILLAURA
 	addModification('else player.isBlocking()?', 'else (player.isBlocking() || blocking)?', true);
