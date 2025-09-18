@@ -618,7 +618,7 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 					return;
 				}
 				const name = args[2];
-				if (!name) {
+				if (mode !== "list" && !name) {
 					game.chat.addChat({text: "Usage: .friend <add|remove> <username> OR .friend list"});
 					return;
 				}
@@ -922,8 +922,8 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 							const distCheck = player.getDistanceSqToEntity(e) < sqRange;
 							if (!distCheck) return false;
 							const isFriend = friends.includes(e.name);
-							const friendCheck = ignoreFriends || !isFriend;
-							if (!friendCheck) return false;
+							const friendCheck = !ignoreFriends && isFriend;
+							if (friendCheck) return false;
 							// pasted
 							const {mode} = e;
 							if (mode.isSpectator() || mode.isCreative()) return false;
