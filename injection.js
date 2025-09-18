@@ -283,7 +283,7 @@ function modifyCode(text) {
 	addModification('ClientSocket.on("CPacketDisconnect",h=>{', `
 		if (enabledModules["AutoRejoin"]) {
 			setTimeout(function() {
-				h.connect(lastJoined);
+				game.connect(lastJoined);
 			}, 400);
 		}
 	`);
@@ -638,6 +638,20 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 						break;
 					}
 					case "list":
+						if (friends.length === 0) {
+							game.chat.addChat({text: "You have no friends added yet!", color: "red"});
+							game.chat.addChat({text:
+								\`\\\\green\\\\Add\\\\reset\\\\ing friends using \\\\yellow\\\\.friend add <friend name>\\\\reset\\\\
+								will make KillAura not attack them.\`
+							});
+							game.chat.addChat({text:
+								\`\\\\green\\\\Removing\\\\reset\\\\ friends using
+								\\\\yellow\\\\.friend remove <name>\\\\reset\\\\
+								or toggling the \\\\yellow\\\\NoFriends\\\\reset\\\\ module
+								will make KillAura attack them again.\`
+							});
+							break;
+						}
 						game.chat.addChat({text: "Friends:", color: "yellow"});
 						for (const friend of friends) {
 							game.chat.addChat({text: friend, color: "blue"});
