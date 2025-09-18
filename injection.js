@@ -917,28 +917,22 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 						const sqRange = killaurarange[1] * killaurarange[1];
 						const entities2 = Array.from(entities.values());
 						attackList = entities2.filter(e => {
-							console.log("hi");
 							const base = e instanceof EntityPlayer && e.id != player.id;
 							if (!base) return false;
 							const distCheck = player.getDistanceSqToEntity(e) < sqRange;
 							if (!distCheck) return false;
 							const isFriend = friends.includes(e.name);
-							console.log("ignoreFriends || !isFriend = ", ignoreFriends, " || ", !isFriend);
 							const friendCheck = ignoreFriends || !isFriend;
 							if (!friendCheck) return false;
 							// pasted
 							const {mode} = e;
 							if (mode.isSpectator() || mode.isCreative()) return false;
-							console.log("not in spectator or creative");
 							const invisCheck = killAuraAttackInvisible[1] || e.isInvisibleDump();
 							if (!invisCheck) return false;
-							console.log("attacking invisible players is enabled or the player isn't invisible");
 							const teamCheck = localTeam && localTeam == getTeam(e);
 							if (teamCheck) return false;
-							console.log("we aren't on the same team or we don't have a team in the 1st place");
 							const wallCheck = killaurawall[1] && !player.canEntityBeSeen(e);
 							if (wallCheck) return false;
-							console.log("we attack people through walls or they aren't behind a wall. Passed all checks!");
 							return true;
 						})
 
