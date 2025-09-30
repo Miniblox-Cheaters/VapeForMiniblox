@@ -5,7 +5,7 @@
  * - change version variable in `injection.js`
  * - creates a commit in the format of "release!: {version}"
  * - pushes the changes
-*/
+ */
 
 import { simpleGit } from "simple-git";
 
@@ -30,8 +30,8 @@ await Deno.writeTextFile(
 	injection
 		.replace(
 			/const VERSION = "[^"]+"/g,
-			`const VERSION = "${version}"`
-		)
+			`const VERSION = "${version}"`,
+		),
 );
 
 let main = await Deno.readTextFile(mainPath);
@@ -40,19 +40,23 @@ const regex = /(\/\/ @require +)([^\r\n]+)/g;
 const matches = main.matchAll(regex);
 
 for (const match of matches) {
-  const all = match[0];
-  const beforeMatch = match[1];
-  const urlStr = match[2];
-  const url = new URL(urlStr);
-  url.pathname = url.pathname.replace("/branch/main", `/tag/${version}`).replaceAll(/\/tag\/[^/]+/g, `/tag/${version}`);
-  url.hash = "";
-  const path = `${baseDirPath}/${url.pathname.split("/").slice(6).join("/")}`;
-  const fileContent = Deno.readTextFileSync(path);
-  const messageBuffer = new TextEncoder().encode(fileContent);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", messageBuffer);
-  const hash = Array.from(new Uint8Array(hashBuffer), (b) => b.toString(16).padStart(2, "0")).join("");
-  url.hash = `sha256=${hash}`;
-  main = main.replace(all, `${beforeMatch}${url}`);
+	const all = match[0];
+	const beforeMatch = match[1];
+	const urlStr = match[2];
+	const url = new URL(urlStr);
+	url.pathname = url.pathname.replace("/branch/main", `/tag/${version}`)
+		.replaceAll(/\/tag\/[^/]+/g, `/tag/${version}`);
+	url.hash = "";
+	const path = `${baseDirPath}/${url.pathname.split("/").slice(6).join("/")}`;
+	const fileContent = Deno.readTextFileSync(path);
+	const messageBuffer = new TextEncoder().encode(fileContent);
+	const hashBuffer = await crypto.subtle.digest("SHA-256", messageBuffer);
+	const hash = Array.from(
+		new Uint8Array(hashBuffer),
+		(b) => b.toString(16).padStart(2, "0"),
+	).join("");
+	url.hash = `sha256=${hash}`;
+	main = main.replace(all, `${beforeMatch}${url}`);
 }
 
 // change version in main.js
@@ -61,11 +65,11 @@ await Deno.writeTextFile(
 	main.replace(/(\/\/ @version +)([^\r\n]+)/g, (_, p1, p2) => {
 		console.log(`Changing version from ${p2} to ${version}`);
 		return `${p1}${version}`;
-	})
+	}),
 );
 
 git
 	.add([injectionPath, mainPath])
 	.commit(`release!: ${version}`)
-	.addTag(`v${version}`)
-	.push();
+	.addTag(`${version}`)
+	.pushTags();
