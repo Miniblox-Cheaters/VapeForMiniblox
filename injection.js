@@ -1388,39 +1388,6 @@ Classic PvP, and OITQ use the new ac, everything else is using the old ac)\`});
 			new Module("AutoVote", function() {});
 			const chatdisabler = new Module("ChatDisabler", function() {});
 			chatdisablermsg = chatdisabler.addoption("Message", String, "youtube.com/c/7GrandDadVape");
-			// messages don't show on other player's screens
-			// let spammerMsg, spammerBypass;
-			// // -1 = no suffix
-			// // 0 = 1 suffix
-			// // 2 = different suffix
-			// let spammerLOL = -1;
-			// const spammer = new Module("Spammer", function(cb) {
-			// 	if (!cb) {
-			// 		delete tickLoop["Spammer"];
-			// 		return;
-			// 	}
-			// 	tickLoop["Spammer"] = function() {
-			// 		let suffix = "";
-			// 		switch (spammerLOL) {
-			// 			case -1:
-			// 				spammerLOL = 0;
-			// 				break;
-			// 			case 0:
-			// 				suffix = "\\\\";
-			// 				spammerLOL = 1;
-			// 				break;
-			// 			case 1:
-			// 				suffix = "\\\\\\\\";
-			// 				spammerLOL = -1;
-			// 				break;
-			// 		}
-			// 		const repeated = \`\${spammerMsg[1]}\n\`.repeat(spammerLOL + 3)
-			// 		const text = \`\${repeated}\${suffix}\`;
-			// 		ClientSocket.sendPacket(new SPacketMessage({text}));
-			// 	}
-			// })
-			// spammerMsg = spammer.addoption("Message", String, "N\\\\IGGER GEN ON TOP https:/\\\\/codeberg.org/RealPacket/miniblox-acc-gen");
-			// spammerBypass = spammer.addoption("Bypass", Boolean, true);
 			new Module("FilterBypass", function() {});
 
 			const survival = new Module("SurvivalMode", function(callback) {
