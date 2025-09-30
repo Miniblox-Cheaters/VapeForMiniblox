@@ -549,6 +549,13 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 				if (module) module.setbind(args[2] == "none" ? "" : args[2], true);
 				return this.closeInput();
 			}
+			case "panic":
+				for(const [name, module] of Object.entries(modules)) module.setEnabled(false);
+				game.chat.addChat({
+					text: "Toggled off all modules!",
+					color: "red"
+				});
+				return this.closeInput();
 			case ".t":
 			case ".toggle":
 				if (args.length > 1) {
@@ -706,9 +713,12 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 					modules[this.name] = this;
 				}
 				toggle() {
-					this.enabled = !this.enabled;
-					enabledModules[this.name] = this.enabled;
-					this.func(this.enabled);
+					this.setEnabled(!this.enabled);
+				}
+				setEnabled(enabled) {
+					this.enabled = enabled;
+					enabledModules[this.name] = enabled;
+					this.func(enabled);
 				}
 				setbind(key, manual) {
 					if (this.bind != "") delete keybindCallbacks[this.bind];
