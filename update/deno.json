@@ -6,5 +6,8 @@
   "imports": {
     "simple-git": "npm:simple-git@^3.27.0",
     "userscript-metadata": "npm:userscript-metadata@^1.1.0"
+  },
+  "fmt": {
+    "useTabs": true
   }
 }
