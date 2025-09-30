@@ -130,8 +130,27 @@ function modifyCode(text) {
 		let renderTickLoop = {};
 
 		let lastJoined, velocityhori, velocityvert, chatdisablermsg, textguifont, textguisize, textguishadow, attackedEntity, stepheight;
+		let useAccountGen, accountGenEndpoint
 		let attackTime = Date.now();
 		let chatDelay = Date.now();
+
+		async function generateAccount() {
+			toast({
+				title: "generating miniblox account via integration...",
+				status: "info",
+				duration: 0.3e3
+			});
+			const res = await fetch(accountGenEndpoint[1]);
+			if (!res.ok)
+				throw await res.text();
+			const j = await res.json();
+			toast({
+				title: \`Generated miniblox account! named \${j.name}!\`,
+				status: "success",
+				duration: 1e3
+			});
+			return j;
+		}
 
 		function getModule(s) {
 			for(const [n, m] of Object.entries(modules)) {
@@ -297,7 +316,7 @@ function modifyCode(text) {
 		if (player && h.text && !h.text.startsWith(player.name) && enabledModules["ChatDisabler"] && chatDelay < Date.now()) {
 			chatDelay = Date.now() + 1000;
 			setTimeout(function() {
-				ClientSocket.sendPacket(new SPacketMessage({text: Math.random() + ("\\n" + chatdisablermsg[1]).repeat(20)}));
+				ClientSocket.sendPacket(new SPacketMessage({text: Math.random() + ("\\n" + chatdisablermsg[1]).repeat(15)}));
 			}, 50);
 		}
 
@@ -491,7 +510,7 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 	`);
 
 	// LOGIN BYPASS
-	addModification('new SPacketLoginStart({requestedUuid:localStorage.getItem(REQUESTED_UUID_KEY)??void 0,session:localStorage.getItem(SESSION_TOKEN_KEY)??"",hydration:localStorage.getItem("hydration")??"0",metricsId:localStorage.getItem("metrics_id")??"",clientVersion:VERSION$1})', 'new SPacketLoginStart({requestedUuid:void 0,session:(enabledModules["AntiBan"] ? "" : (localStorage.getItem(SESSION_TOKEN_KEY) ?? "")),hydration:"0",metricsId:uuid$1(),clientVersion:VERSION$1})', true);
+	addModification('new SPacketLoginStart({requestedUuid:localStorage.getItem(REQUESTED_UUID_KEY)??void 0,session:localStorage.getItem(SESSION_TOKEN_KEY)??"",hydration:localStorage.getItem("hydration")??"0",metricsId:localStorage.getItem("metrics_id")??"",clientVersion:VERSION$1})', 'new SPacketLoginStart({requestedUuid:void 0,session:(enabledModules["AntiBan"] ? useAccountGen[1] ? (await generateAccount()).session : "" : (localStorage.getItem(SESSION_TOKEN_KEY) ?? "")),hydration:"0",metricsId:uuid$1(),clientVersion:VERSION$1})', true);
 
 	// KEY FIX
 	addModification('Object.assign(keyMap,u)', '; keyMap["Semicolon"] = "semicolon"; keyMap["Apostrophe"] = "apostrophe";');
@@ -669,6 +688,10 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 		}
 	`);
 
+
+	// ANTI BLIND
+	addModification("player.isPotionActive(Potions.blindness)", 'player.isPotionActive(Potions.blindness) && !enabledModules["AntiBlind"]', true);
+
 	// MAIN
 	addModification('document.addEventListener("contextmenu",m=>m.preventDefault());', /*js*/`
 		// my code lol
@@ -722,6 +745,7 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 					}
 				} else delete tickLoop["AutoClicker"];
 			});
+			new Module("AntiBlind", function() {});
 			new Module("AntiCheat", function(callback) {
 				if (!callback)
 					return; // TODO: deinitialization logic
@@ -824,23 +848,17 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 							&& !player.isOnLadder();
 						if (couldCrit) {
 							if (!player.onGround) {
-								// go a tiny bit down
 						 		ClientSocket.sendPacket(new SPacketPlayerPosLook({
 						 			pos: {
 										...player.pos,
-										y: player.pos.y - 1e-9
+										y: player.pos.y - 4.9E-324
 									},
 									onGround: false
-						 		}));
-						 		ClientSocket.sendPacket(new SPacketPlayerPosLook({
-						 			pos: player.pos,
-									onGround: sendGround ?? player.onGround
 						 		}));
 								return;
 							}
 							const offsets = [
-								0.49, 0.41159999848,
-								0.07840000152, -0.07840000152
+								0.08, -0.07840000152
 							];
 						 	for (const offset of offsets) {
 						 		const pos = {
@@ -1038,21 +1056,26 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 			const infiniteFly = new Module("InfiniteFly", function(callback) {
 				if (callback) {
 					if (!warned) {
-					game.chat.addChat({text:
-						\`Infinite Fly only works on servers using the old ac
+						game.chat.addChat({text:
+							\`Infinite Fly only works on servers using the old ac
 (KitPvP, Skywars, Eggwars, Bridge Duels,
 Classic PvP, and OITQ use the new ac, everything else is using the old ac)\`});
+						warned = true;
 					}
 					let ticks = 0;
 					tickLoop["InfiniteFly"] = function() {
 						sendGround = undefined;
 						ticks++;
-						const dir = getMoveDirection(0.37);
+						const dir = getMoveDirection(0.37799);
 						player.motion.x = dir.x;
 						player.motion.z = dir.z;
 						const goUp = keyPressedDump("space");
 						const goDown = keyPressedDump("shift");
 						sendGround = true;
+						if (ticks < 6 && !goUp && !goDown) {
+							player.motion.y = 0;
+							return;
+						}
 						if (goUp || goDown) {
 							player.motion.y = goUp ? infiniteFlyVert[1] : -infiniteFlyVert[1];
 						} else if (!infiniteFlyLessGlide[1] || ticks % 2 === 0) {
@@ -1068,7 +1091,7 @@ Classic PvP, and OITQ use the new ac, everything else is using the old ac)\`});
 					// we have to wait a few ticks before allowing the player to move.
 					let ticks = 0;
 					tickLoop["InfiniteFlyStop"] = function() {
-						if (player && ticks < 3) {
+						if (player && ticks < 4) {
 							player.motion.y = 0.18;
 							ticks++;
 						} else {
@@ -1347,12 +1370,47 @@ Classic PvP, and OITQ use the new ac, everything else is using the old ac)\`});
 			new Module("Phase", function() {});
 
 			const antiban = new Module("AntiBan", function() {});
+			useAccountGen = antiban.addoption("AccountGen", Boolean, false);
+			accountGenEndpoint = antiban.addoption("GenServer", String, "http://localhost:8000/generate");
 			antiban.toggle();
 			new Module("AutoRejoin", function() {});
 			new Module("AutoQueue", function() {});
 			new Module("AutoVote", function() {});
 			const chatdisabler = new Module("ChatDisabler", function() {});
 			chatdisablermsg = chatdisabler.addoption("Message", String, "youtube.com/c/7GrandDadVape");
+			// messages don't show on other player's screens
+			// let spammerMsg, spammerBypass;
+			// // -1 = no suffix
+			// // 0 = 1 suffix
+			// // 2 = different suffix
+			// let spammerLOL = -1;
+			// const spammer = new Module("Spammer", function(cb) {
+			// 	if (!cb) {
+			// 		delete tickLoop["Spammer"];
+			// 		return;
+			// 	}
+			// 	tickLoop["Spammer"] = function() {
+			// 		let suffix = "";
+			// 		switch (spammerLOL) {
+			// 			case -1:
+			// 				spammerLOL = 0;
+			// 				break;
+			// 			case 0:
+			// 				suffix = "\\\\";
+			// 				spammerLOL = 1;
+			// 				break;
+			// 			case 1:
+			// 				suffix = "\\\\\\\\";
+			// 				spammerLOL = -1;
+			// 				break;
+			// 		}
+			// 		const repeated = \`\${spammerMsg[1]}\n\`.repeat(spammerLOL + 3)
+			// 		const text = \`\${repeated}\${suffix}\`;
+			// 		ClientSocket.sendPacket(new SPacketMessage({text}));
+			// 	}
+			// })
+			// spammerMsg = spammer.addoption("Message", String, "N\\\\IGGER GEN ON TOP https:/\\\\/codeberg.org/RealPacket/miniblox-acc-gen");
+			// spammerBypass = spammer.addoption("Bypass", Boolean, true);
 			new Module("FilterBypass", function() {});
 
 			const survival = new Module("SurvivalMode", function(callback) {
