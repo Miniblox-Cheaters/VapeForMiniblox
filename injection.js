@@ -253,6 +253,8 @@ function modifyCode(text) {
 	// TEXT GUI
 	addModification('(this.drawSelectedItemStack(),this.drawHintBox())', /*js*/`
 		if (ctx$5 && enabledModules["TextGUI"]) {
+			const canvasW = ctx$5.canvas.width;
+			const canvasH = ctx$5.canvas.height;
 			const colorOffset = (Date.now() / 4000);
 			const posX = 15;
 			const posY = 17;
@@ -262,21 +264,73 @@ function modifyCode(text) {
 			drawImage(ctx$5, textureManager.v4Texture.image, posX + 81, posY + 1, 33, 18);
 
 			let offset = 0;
-			let stringList = [];
-			for(const [module, value] of Object.entries(enabledModules)) {
-				if (!value || module == "TextGUI") continue;
-				stringList.push(module);
-			}
+			let filtered = Object.values(modules).filter(m => m.enabled && m.name !== "TextGUI");
 
-			stringList.sort(function(a, b) {
-				const compA = ctx$5.measureText(a).width;
-				const compB = ctx$5.measureText(b).width;
+			filtered.sort((a, b) => {
+				const aName = a.name;
+				const bName = b.name;
+				const compA = ctx$5.measureText(aName).width;
+				const compB = ctx$5.measureText(bName).width;
 				return compA < compB ? 1 : -1;
 			});
 
-			for(const module of stringList) {
+			for(const module of filtered) {
 				offset++;
-				drawText(ctx$5, module, posX + 6, posY + 12 + ((textguisize[1] + 3) * offset), textguisize[1] + "px " + textguifont[1], \`HSL(\${((colorOffset - (0.025 * offset)) % 1) * 360}, 100%, 50%)\`, "left", "top", 1, textguishadow[1]);
+				
+				const fontStyle = \`\${textguisize[1]}px \${textguifont[1]}\`;
+				ctx$5.font = fontStyle;
+
+				// Build strings
+				const rainbowText = module.name;
+				const modeText = module.tag ?? "";
+
+				const fullText = rainbowText + modeText;
+				const textWidth = ctx$5.measureText(fullText).width;
+				const x = canvasW - textWidth - posX;
+				const y = posY + (textguisize[1] + 3) * offset;
+
+				// Shadow for both parts
+				ctx$5.shadowColor = "black";
+				ctx$5.shadowBlur = 4;
+				ctx$5.shadowOffsetX = 1;
+				ctx$5.shadowOffsetY = 1;
+
+				// Draw rainbow part
+				drawText(
+					ctx$5,
+					rainbowText,
+					x,
+					y,
+					fontStyle,
+					\`hsl(\${((colorOffset - 0.025 * offset) % 1) * 360},100%,50%)\`,
+					"left",
+					"top",
+					1,
+					textguishadow[1]
+				);
+
+				// Draw grey mode part (after rainbow width)
+				if (modeText) {
+					const rainbowWidth = ctx$5.measureText(rainbowText).width;
+					drawText(
+						ctx$5,
+						modeText,
+						x + rainbowWidth + 6,
+						y,
+						fontStyle,
+						"#bbbbbb",
+						"left",
+						"top",
+						1,
+						textguishadow[1]
+					);
+				}
+
+				// Reset shadow
+				ctx$5.shadowColor = "transparent";
+				ctx$5.shadowBlur = 0;
+				ctx$5.shadowOffsetX = 0;
+				ctx$5.shadowOffsetY = 0;
 			}
 		}
 	`);
@@ -704,12 +758,20 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 		// my code lol
 		(function() {
 			class Module {
-				constructor(name, func) {
+				name;
+				func;
+				enabled = false;
+				bind = "";
+				options = {};
+				/** @type {() => string | undefined} */
+				tagGetter = () => undefined;
+				constructor(name, func, tag = () => undefined) {
 					this.name = name;
 					this.func = func;
 					this.enabled = false;
 					this.bind = "";
 					this.options = {};
+					this.tagGetter = tag;
 					modules[this.name] = this;
 				}
 				toggle() {
@@ -719,6 +781,9 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 					this.enabled = enabled;
 					enabledModules[this.name] = enabled;
 					this.func(enabled);
+				}
+				get tag() {
+					return this.tagGetter();
 				}
 				setbind(key, manual) {
 					if (this.bind != "") delete keybindCallbacks[this.bind];
@@ -767,7 +832,7 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 							continue; // ignore Albert einstein or someone who died
 						// TODO: track the player's position and get the difference from previous position to new position.
 				}
-			})
+			});
 
             function reloadTickLoop(value) {
 				if (game.tickLoop) {
@@ -778,7 +843,7 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 			}
 
 			new Module("Sprint", function() {});
-			const velocity = new Module("Velocity", function() {});
+			const velocity = new Module("Velocity", function() {}, () => \`\${velocityhori[1]}% \${velocityvert[1]}%\`);
 			velocityhori = velocity.addoption("Horizontal", Number, 0);
 			velocityvert = velocity.addoption("Vertical", Number, 0);
 
@@ -821,6 +886,7 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 			let attackedPlayers = {};
 			let boxMeshes = [];
 			let killaurarange, killaurablock, killaurabox, killauraangle, killaurawall, killauraitem;
+			let killauraSwitchDelay;
 
 			function wrapAngleTo180_radians(j) {
 				return j = j % (2 * Math.PI),
@@ -836,7 +902,8 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 					const checkYaw = wrapAngleTo180_radians(Math.atan2(aimPos.x, aimPos.z) - player.yaw);
 					if (first) sendYaw = Math.abs(checkYaw) > degToRad(30) && Math.abs(checkYaw) < degToRad(killauraangle[1]) ? player.lastReportedYawDump + newYaw : false;
 					if (Math.abs(newYaw) < degToRad(30)) {
-						if ((attackedPlayers[entity.id] || 0) < Date.now()) attackedPlayers[entity.id] = Date.now() + 100;
+						if ((attackedPlayers[entity.id] ?? 0) < Date.now())
+							attackedPlayers[entity.id] = Date.now() + killauraSwitchDelay[1];
 						if (!didSwing) {
 							hud3D.swingArm();
 							ClientSocket.sendPacket(new SPacketClick({}));
@@ -858,30 +925,23 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 							&& !player.isOnLadder();
 						if (couldCrit) {
 							if (!player.onGround) {
-						 		ClientSocket.sendPacket(new SPacketPlayerPosLook({
-						 			pos: {
-										...player.pos,
-										y: player.pos.y - 4.9E-324
-									},
-									onGround: false
-						 		}));
 								return;
 							}
 							const offsets = [
 								0.08, -0.07840000152
 							];
-						 	for (const offset of offsets) {
-						 		const pos = {
-						 			x: player.pos.x,
-						 			y: player.pos.y + offset,
-						 			z: player.pos.z
-						 		};
-						 		ClientSocket.sendPacket(new SPacketPlayerPosLook({
-						 			pos,
+							for (const offset of offsets) {
+								const pos = {
+									x: player.pos.x,
+									y: player.pos.y + offset,
+									z: player.pos.z
+								};
+								ClientSocket.sendPacket(new SPacketPlayerPosLook({
+									pos,
 									onGround: false
-						 		}));
-						 	}
-						 }
+								}));
+							}
+						}
 
 						ClientSocket.sendPacket(new SPacketUseEntity({
 							id: entity.id,
@@ -933,7 +993,7 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 
 			new Module("NoFriends", function(enabled) {
 				ignoreFriends = enabled;
-			})
+			}, () => "Ignore");
 
 			let killAuraAttackInvisible;
 			let attackList = [];
@@ -1011,7 +1071,7 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 					sendYaw = false;
 					unblock();
 				}
-			});
+			}, () => \`\${killaurarange[1]} block\${killaurarange[1] == 1 ? "" : "s"} \${killaurablock[1] ? "Auto Block" : ""}\`);
 			killaurarange = killaura.addoption("Range", Number, 9);
 			killauraangle = killaura.addoption("Angle", Number, 360);
 			killaurablock = killaura.addoption("AutoBlock", Boolean, true);
@@ -1019,6 +1079,7 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 			killaurabox = killaura.addoption("Box", Boolean, true);
 			killauraitem = killaura.addoption("LimitToSword", Boolean, false);
 			killAuraAttackInvisible = killaura.addoption("AttackInvisbles", Boolean, true);
+			killauraSwitchDelay = killaura.addoption("SwitchDelay", Number, 100);
 
 			new Module("FastBreak", function() {});
 
@@ -1055,7 +1116,7 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 						player.motion.z = Math.max(Math.min(player.motion.z, 0.3), -0.3);
 					}
 				}
-			});
+			}, () => \`\${flyvalue[1]} b/t \${flyvert[1]} b/t V\`);
 			flybypass = fly.addoption("Bypass", Boolean, true);
 			flyvalue = fly.addoption("Speed", Number, 2);
 			flyvert = fly.addoption("Vertical", Number, 0.7);
@@ -1109,13 +1170,13 @@ Classic PvP, and OITQ use the new ac, everything else is using the old ac)\`});
 						}
 					}
 				}
-			});
+			},  () => \`V \${infiniteFlyVert[1]} \${infiniteFlyLessGlide[1] ? "LessGlide" : "MoreGlide"}\`);
 			infiniteFlyVert = infiniteFly.addoption("Vertical", Number, 0.3);
 			infiniteFlyLessGlide = infiniteFly.addoption("LessGlide", Boolean, true);
 
-			new Module("InvWalk", function() {});
-			new Module("KeepSprint", function() {});
-			new Module("NoSlowdown", function() {});
+			new Module("InvWalk", function() {}, () => "Ignore");
+			new Module("KeepSprint", function() {}, () => "Ignore");
+			new Module("NoSlowdown", function() {}, () => "Ignore");
 			new Module("MusicFix", function() {});
 
 			// Speed
@@ -1138,12 +1199,12 @@ Classic PvP, and OITQ use the new ac, everything else is using the old ac)\`});
 					};
 				}
 				else delete tickLoop["Speed"];
-			});
+			}, () => \`V \${speedvalue[1]} J \${speedjump[1]} \${speedauto[1] ? "A" : "M"}\`);
 			speedvalue = speed.addoption("Speed", Number, 0.39);
 			speedjump = speed.addoption("JumpHeight", Number, 0.42);
 			speedauto = speed.addoption("AutoJump", Boolean, true);
 
-			const step = new Module("Step", function() {});
+			const step = new Module("Step", function() {}, () => stepheight[1]);
 			stepheight = step.addoption("Height", Number, 2);
 
 			new Module("Chams", function() {});
@@ -1154,28 +1215,70 @@ Classic PvP, and OITQ use the new ac, everything else is using the old ac)\`});
 			textgui.toggle();
 			new Module("AutoRespawn", function() {});
 
+			let lbt = -1;
+
+			const blockHandlers = {
+				rightClick(pos) {
+					ClientSocket.sendPacket(new SPacketClick({
+						location: pos
+					}));
+				},
+				breakBlock(pos) {
+					ClientSocket.sendPacket(new SPacketBreakBlock({
+						location: pos,
+						start: false
+					}));
+				}
+			};
+
+			function isAir(b) {
+				return b instanceof BlockAir;
+			}
+			function isSolid(b) {
+				return b.material.isSolid();
+			}
+			const dfltFilter = b => isSolid(b);
+
+			function handleInRange(range, filter = dfltFilter, handler = blockHandlers.rightClick) {
+				const min = new BlockPos(player.pos.x - range, player.pos.y - range, player.pos.z - range);
+				const max = new BlockPos(player.pos.x + range, player.pos.y + range, player.pos.z + range);
+				const blocks = BlockPos.getAllInBoxMutable(min, max);
+				const filtered = filter !== undefined ? blocks.filter(b => {
+					return filter(game.world.getBlock(b));
+				}) : blocks;
+				filtered.forEach(handler);
+				return filtered;
+			}
+
 			// Breaker
 			let breakerrange;
 			const breaker = new Module("Breaker", function(callback) {
 				if (callback) {
-					let attemptDelay = {};
 					tickLoop["Breaker"] = function() {
 						if (breakStart > Date.now()) return;
 						let offset = breakerrange[1];
-						for (const block of BlockPos.getAllInBoxMutable(new BlockPos(player.pos.x - offset, player.pos.y - offset, player.pos.z - offset), new BlockPos(player.pos.x + offset, player.pos.y + offset, player.pos.z + offset))) {
-							if (game.world.getBlockState(block).getBlock() instanceof BlockDragonEgg) {
-								if ((attemptDelay[block] || 0) > Date.now()) continue;
-								attemptDelay[block] = Date.now() + 500;
-								ClientSocket.sendPacket(new SPacketClick({
-									location: block
-								}));
-							}
-						}
+						handleInRange(breakerrange[1], b => b instanceof BlockDragonEgg);
 					}
 				}
 				else delete tickLoop["Breaker"];
-			});
+			}, () => \`\${breakerrange[1]} block\${breakerrange[1] == 1 ? "" : "s"}\`);
 			breakerrange = breaker.addoption("Range", Number, 10);
+
+			// Nuker
+			// TODO: fix kick from sending too many packets,
+			// and also fixes for when the break time isn't instant
+			let nukerRange;
+			const nuker = new Module("Nuker", function(callback) {
+				if (callback) {
+					tickLoop["Nuker"] = function() {
+						let offset = nukerRange[1];
+						handleInRange(nukerRange[1], undefined, blockHandlers.breakBlock);
+					}
+				}
+				else delete tickLoop["Nuker"];
+			}, () => \`\${nukerRange[1]} block\${nukerRange[1] == 1 ? "" : "s"}\`);
+			nukerRange = nuker.addoption("Range", Number, 10);
+
 
 			function getItemStrength(stack) {
 				if (stack == null) return 0;
@@ -1282,7 +1385,7 @@ Classic PvP, and OITQ use the new ac, everything else is using the old ac)\`});
 					}
 				}
 				else delete tickLoop["ChestSteal"];
-			});
+			}, () => \`\${cheststealblocks[1] ? "B: Y" : "B: N"} \${cheststealtools[1] ? "T: Y" : "T: N"}\`);
 			cheststealblocks = cheststeal.addoption("Blocks", Boolean, true);
 			cheststealtools = cheststeal.addoption("Tools", Boolean, false);
 
@@ -1321,8 +1424,8 @@ Classic PvP, and OITQ use the new ac, everything else is using the old ac)\`});
 								if (!placeSide) {
 									let closestSide, closestPos;
 									let closest = 999;
-									for(let x = -5; x < 5; ++x) {
-										for (let z = -5; z < 5; ++z) {
+									for(let x = -6; x < 6; ++x) {
+										for (let z = -6; z < 6; ++z) {
 											const newPos = new BlockPos(pos.x + x, pos.y, pos.z + z);
 											const checkNearby = getPossibleSides(newPos);
 											if (checkNearby) {
@@ -1368,34 +1471,34 @@ Classic PvP, and OITQ use the new ac, everything else is using the old ac)\`});
 					if (player && oldHeld != undefined) switchSlot(oldHeld);
 					delete tickLoop["Scaffold"];
 				}
-			});
+			}, () => \`\${scaffoldtower[1] ? "Tower enabled" : "Horizontal Only"}\`);
 			scaffoldtower = scaffold.addoption("Tower", Boolean, true);
 			// scaffoldextend = scaffold.addoption("Extend", Number, 0);
 
 			let timervalue;
 			const timer = new Module("Timer", function(callback) {
 				reloadTickLoop(callback ? 50 / timervalue[1] : 50);
-			});
+			}, () => \`\${timervalue[1]} MSPT\`);
 			timervalue = timer.addoption("Value", Number, 1.2);
 			new Module("Phase", function() {});
 
-			const antiban = new Module("AntiBan", function() {});
+			const antiban = new Module("AntiBan", function() {}, () => useAccountGen ? "Gen" : "Non Account");
 			useAccountGen = antiban.addoption("AccountGen", Boolean, false);
 			accountGenEndpoint = antiban.addoption("GenServer", String, "http://localhost:8000/generate");
 			antiban.toggle();
 			new Module("AutoRejoin", function() {});
 			new Module("AutoQueue", function() {});
 			new Module("AutoVote", function() {});
-			const chatdisabler = new Module("ChatDisabler", function() {});
+			const chatdisabler = new Module("ChatDisabler", function() {}, () => "Spam");
 			chatdisablermsg = chatdisabler.addoption("Message", String, "youtube.com/c/7GrandDadVape");
-			new Module("FilterBypass", function() {});
+			new Module("FilterBypass", function() {}, () => "\\\\");
 
 			const survival = new Module("SurvivalMode", function(callback) {
 				if (callback) {
 					if (player) player.setGamemode(GameMode.fromId("survival"));
 					survival.toggle();
 				}
-			});
+			}, () => "Spoof");
 
 			globalThis.${storeName}.modules = modules;
 			globalThis.${storeName}.profile = "default";
