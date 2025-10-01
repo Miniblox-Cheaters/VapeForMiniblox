@@ -282,9 +282,9 @@ function modifyCode(text) {
 
 				// Build strings
 				const rainbowText = module.name;
-				const modeText = module.tag ?? "";
+				const modeText = module.tag?.trim();
 
-				const fullText = rainbowText + modeText;
+				const fullText = \`\${rainbowText}\${modeText ? " " + modeText : ""}\`;
 				const textWidth = ctx$5.measureText(fullText).width;
 				const x = canvasW - textWidth - posX;
 				const y = posY + (textguisize[1] + 3) * offset;
@@ -315,7 +315,7 @@ function modifyCode(text) {
 					drawText(
 						ctx$5,
 						modeText,
-						x + rainbowWidth + 6,
+						x + rainbowWidth + 4,
 						y,
 						fontStyle,
 						"#bbbbbb",
@@ -441,6 +441,15 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 	addModification("x.yaw=player.yaw", 'x.yaw=(sendYaw || this.yaw)', true);
 	addModification('this.lastReportedYawDump=this.yaw,', 'this.lastReportedYawDump=(sendYaw || this.yaw),', true);
 	addModification('this.neck.rotation.y=controls.yaw', 'this.neck.rotation.y=(sendYaw||controls.yaw)', true);
+	// hook this so we send `sendYaw` to the server,
+	// since the new ac replicates the yaw from the input packet
+	addModification("yaw:this.yaw", "yaw:(sendYaw || this.yaw)", true);
+	// stops applyInput from changing our yaw and correcting our movement,
+	// but that makes the server setback us
+	// when we go too far from the predicted pos since we don't do correction
+	// TODO, would it be better to send an empty input packet with the sendYaw instead?
+	// addModification("this.yaw=h.yaw,this.pitch=h.pitch,", "", true);
+	// addModification(",this.setPositionAndRotation(this.pos.x,this.pos.y,this.pos.z,h.yaw,h.pitch)", "", true);
 
 	// NOSLOWDOWN
 	addModification('updatePlayerMoveState(),this.isUsingItem()', 'updatePlayerMoveState(),(this.isUsingItem() && !enabledModules["NoSlowdown"])', true);
@@ -879,6 +888,32 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 				else delete tickLoop["AntiFall"];
 			});
 
+			const criticals = new Module("Criticals", () => {}, () => "Packet");
+
+			/** y offset values, that when used before attacking a player, gives a critical hit. **/
+			const CRIT_OFFSETS = [
+				0.08, -0.07840000152
+			];
+
+			/** call this before sending a use entity packet to attack. this makes the player crit **/
+			function crit(when = criticals.enabled && player.onGround) {
+				if (!when) {
+					return;
+				}
+
+				for (const offset of CRIT_OFFSETS) {
+					const pos = {
+						x: player.pos.x,
+						y: player.pos.y + offset,
+						z: player.pos.z
+					};
+					ClientSocket.sendPacket(new SPacketPlayerPosLook({
+						pos,
+						onGround: false
+					}));
+				}
+			}
+
 			// Killaura
 			let attackDelay = Date.now();
 			let didSwing = false;
@@ -943,6 +978,7 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 							}
 						}
 
+						sendYaw = false;
 						ClientSocket.sendPacket(new SPacketUseEntity({
 							id: entity.id,
 							action: 1,
