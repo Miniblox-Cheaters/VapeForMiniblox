@@ -914,6 +914,8 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 							}));
 						}
 					}
+				} else {
+					delete tickLoop["ServerCrasher"];
 				}
 			}, () => "Spam Chunk Load");
 
