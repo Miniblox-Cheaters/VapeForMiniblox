@@ -14,7 +14,7 @@ const splitted = import.meta.dirname?.split("/");
 splitted?.pop();
 const baseDirPath = splitted?.join("/");
 const injectionPath = `${baseDirPath}/injection.js`;
-const mainPath = `${baseDirPath}/main.js`;
+const mainPath = `${baseDirPath}/tampermonkey.user.js`;
 
 const version = Deno.args[0];
 
@@ -59,7 +59,7 @@ for (const match of matches) {
 	main = main.replace(all, `${beforeMatch}${url}`);
 }
 
-// change version in main.js
+// change version in the tampermonkey script
 await Deno.writeTextFile(
 	mainPath,
 	main.replace(/(\/\/ @version +)([^\r\n]+)/g, (_, p1, p2) => {
