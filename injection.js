@@ -354,7 +354,11 @@ function modifyCode(text) {
 	addModification('connect(u,h=!1,p=!1){', 'lastJoined = u;');
 	addModification('SliderOption("Render Distance ",2,8,3)', 'SliderOption("Render Distance ",2,64,3)', true);
 	addModification('ClientSocket.on("CPacketDisconnect",h=>{', `
-		if (enabledModules["AutoRejoin"]) {
+		if (enabledModules.ServerCrasher) {
+			modules.serverCrasher.setEnabled(false);
+			return;
+		}
+		if (enabledModules.AutoRejoin) {
 			setTimeout(function() {
 				game.connect(lastJoined);
 			}, 400);
