@@ -354,16 +354,23 @@ function modifyCode(text) {
 	addModification('connect(u,h=!1,p=!1){', 'lastJoined = u;');
 	addModification('SliderOption("Render Distance ",2,8,3)', 'SliderOption("Render Distance ",2,64,3)', true);
 	addModification('ClientSocket.on("CPacketDisconnect",h=>{', `
-		if (enabledModules.ServerCrasher) {
-			modules.ServerCrasher.setEnabled(false);
-			return;
-		}
 		if (enabledModules.AutoRejoin) {
 			setTimeout(function() {
 				game.connect(lastJoined);
 			}, 400);
 		}
 	`);
+	addModification('ClientSocket.on("disconnect",async h=>{', `
+if (enabledModules.ServerCrasher) {
+	console.info("got disconnected while server crasher is on");
+	toast({
+		title: "Server crashed!",
+		status: "success",
+		duration: 0.5e3
+	});
+	modules.ServerCrasher.setEnabled(false);
+}
+`)
 	// MUSIC FIX
 	addModification('const u=lodashExports.sample(MUSIC);',
 		`const vol = Options$1.sound.music.volume / BASE_VOLUME;
@@ -923,9 +930,9 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 				}
 			}, () => "Spam Chunk Load");
 
-			serverCrasherStartX = serverCrasher.addoption("Start X", Number, 99e9);
-			serverCrasherStartZ = serverCrasher.addoption("Start Z", Number, 99e9);
-			serverCrasherPacketsPerTick = serverCrasher.addoption("Packets Per Tick", Number, 16);
+			serverCrasherStartX = serverCrasher.addoption("StartX", Number, 99e9);
+			serverCrasherStartZ = serverCrasher.addoption("StartZ", Number, 99e9);
+			serverCrasherPacketsPerTick = serverCrasher.addoption("PacketsPerTick", Number, 16);
 
 			/** y offset values, that when used before attacking a player, gives a critical hit. **/
 			const CRIT_OFFSETS = [
