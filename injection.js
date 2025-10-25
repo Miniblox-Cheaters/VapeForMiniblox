@@ -362,7 +362,6 @@ function modifyCode(text) {
 	`);
 	addModification('ClientSocket.on("disconnect",async h=>{', `
 if (enabledModules.ServerCrasher) {
-	console.info("got disconnected while server crasher is on");
 	toast({
 		title: "Server crashed!",
 		status: "success",
@@ -459,8 +458,9 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 	// but that makes the server setback us
 	// when we go too far from the predicted pos since we don't do correction
 	// TODO, would it be better to send an empty input packet with the sendYaw instead?
-	// addModification("this.yaw=h.yaw,this.pitch=h.pitch,", "", true);
-	// addModification(",this.setPositionAndRotation(this.pos.x,this.pos.y,this.pos.z,h.yaw,h.pitch)", "", true);
+	// I can't be asked to work on fixing this not working on the prediction ac
+	addModification("this.yaw=h.yaw,this.pitch=h.pitch,", "", true);
+	addModification(",this.setPositionAndRotation(this.pos.x,this.pos.y,this.pos.z,h.yaw,h.pitch)", "", true);
 
 	// NOSLOWDOWN
 	addModification('updatePlayerMoveState(),this.isUsingItem()', 'updatePlayerMoveState(),(this.isUsingItem() && !enabledModules["NoSlowdown"])', true);
@@ -1003,23 +1003,7 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 						const couldCrit = player.ridingEntity == null && !player.inWater
 							&& !player.isOnLadder();
 						if (couldCrit) {
-							if (!player.onGround) {
-								return;
-							}
-							const offsets = [
-								0.08, -0.07840000152
-							];
-							for (const offset of offsets) {
-								const pos = {
-									x: player.pos.x,
-									y: player.pos.y + offset,
-									z: player.pos.z
-								};
-								ClientSocket.sendPacket(new SPacketPlayerPosLook({
-									pos,
-									onGround: false
-								}));
-							}
+							crit();
 						}
 
 						sendYaw = false;
@@ -1077,6 +1061,37 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 
 			let killAuraAttackInvisible;
 			let attackList = [];
+
+			function findTarget(range = 6, angle = 360) {
+				const localPos = controls.position.clone();
+				const localTeam = getTeam(player);
+				const entities = game.world.entitiesDump;
+
+				const sqRange = range * range;
+				const entities2 = Array.from(entities.values());
+
+				const targets = entities2.filter(e => {
+					const base = e instanceof EntityPlayer && e.id != player.id;
+					if (!base) return false;
+					const distCheck = player.getDistanceSqToEntity(e) < sqRange;
+					if (!distCheck) return false;
+					const isFriend = friends.includes(e.name);
+					const friendCheck = !ignoreFriends && isFriend;
+					if (friendCheck) return false;
+					// pasted
+					const {mode} = e;
+					if (mode.isSpectator() || mode.isCreative()) return false;
+					const invisCheck = killAuraAttackInvisible[1] || e.isInvisibleDump();
+					if (!invisCheck) return false;
+					const teamCheck = localTeam && localTeam == getTeam(e);
+					if (teamCheck) return false;
+					const wallCheck = killaurawall[1] && !player.canEntityBeSeen(e);
+					if (wallCheck) return false;
+					return true;
+				})
+
+				return targets;
+			}
 			const killaura = new Module("Killaura", function(callback) {
 				if (callback) {
 					for(let i = 0; i < 10; i++) {
@@ -1092,31 +1107,8 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 					tickLoop["Killaura"] = function() {
 						attacked = 0;
 						didSwing = false;
-						const localPos = controls.position.clone();
-						const localTeam = getTeam(player);
-						const entities = game.world.entitiesDump;
 
-						const sqRange = killaurarange[1] * killaurarange[1];
-						const entities2 = Array.from(entities.values());
-						attackList = entities2.filter(e => {
-							const base = e instanceof EntityPlayer && e.id != player.id;
-							if (!base) return false;
-							const distCheck = player.getDistanceSqToEntity(e) < sqRange;
-							if (!distCheck) return false;
-							const isFriend = friends.includes(e.name);
-							const friendCheck = !ignoreFriends && isFriend;
-							if (friendCheck) return false;
-							// pasted
-							const {mode} = e;
-							if (mode.isSpectator() || mode.isCreative()) return false;
-							const invisCheck = killAuraAttackInvisible[1] || e.isInvisibleDump();
-							if (!invisCheck) return false;
-							const teamCheck = localTeam && localTeam == getTeam(e);
-							if (teamCheck) return false;
-							const wallCheck = killaurawall[1] && !player.canEntityBeSeen(e);
-							if (wallCheck) return false;
-							return true;
-						})
+						attackList = findTarget(killaurarange[1], killauraangle[1]);
 
 						attackList.sort((a, b) => {
 							return (attackedPlayers[a.id] || 0) > (attackedPlayers[b.id] || 0) ? 1 : -1;
@@ -1161,6 +1153,81 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 			killAuraAttackInvisible = killaura.addoption("AttackInvisbles", Boolean, true);
 			killauraSwitchDelay = killaura.addoption("SwitchDelay", Number, 100);
 
+			function scanFor(filter, range = 9) {
+				for (let i = 0; i < range; i++) {
+					const item = player.inventory.main[i];
+					if (filter(item)) {
+						return i;
+					}
+				}
+				return null;
+			}
+			function wouldLightOnFire(item) {
+				return item && (item.item instanceof ItemFlintAndSteel || item.item instanceof ItemBucket);
+			}
+
+			new Module("Ignite", enabled => {
+				if (!enabled) { delete tickLoop["Ignite"]; return; }
+				let itemIdx = null;
+				tickLoop["Ignite"] = function() {
+					if (itemIdx === null || !wouldLightOnFire(itemIdx)) {
+						itemIdx = scanFor(wouldLightOnFire);
+					}
+					const targets = findTarget(6, 360);
+
+					if (targets.length <= 0) return;
+
+					const change = itemIdx !== null
+						&& game.info.selectedSlot != itemIdx;
+
+					if (change)
+						ClientSocket.sendPacket(new SPacketHeldItemChange({slot: itemIdx}));
+
+					for (const entity of targets) {
+						const box = entity.getEntityBoundingBox();
+						const hitVec = player.getEyePos().clone().clamp(box.min, box.max);
+
+						const item = player.inventory.main[itemIdx];
+
+						let placeSide;
+						const startPos = new BlockPos(entity.pos.x, entity.pos.y - entity.height, entity.pos.z);
+						let pos = startPos.clone();
+						if (game.world.getBlockState(pos).getBlock().material == Materials.air) {
+							placeSide = getPossibleSides(pos);
+							if (!placeSide) {
+								const {pos: closestPos, placeSide: closestSide} = getClosestBlockInRange(startPos);
+
+								if (closestPos !== undefined && closestSide !== undefined) {
+									pos = closestPos;
+									placeSide = closestSide;
+								}
+							}
+						}
+
+						if (!placeSide) return;
+
+						const dir = placeSide.getOpposite().toVector();
+						const newDir = placeSide.toVector();
+
+						console.log("place IPOPLHV",
+							item, pos,
+							placeSide, hitVec
+						);
+
+						if (!playerControllerDump.onPlayerRightClick(
+							player, game.world,
+							item, pos,
+							placeSide, hitVec
+						)) {
+							console.log("failed to ignite");
+						} else {
+							console.log("ignited");
+						}
+					}
+
+					if (change) playerControllerMP.syncItemDump();
+				}
+			});
 			new Module("FastBreak", function() {});
 
 			function getMoveDirection(moveSpeed) {
@@ -1480,6 +1547,38 @@ Classic PvP, and OITQ use the new ac, everything else is using the old ac)\`});
 				game.info.selectedSlot = slot;
 			}
 
+			function getClosestBlockInRange(origin, range = 6) {
+				let placeSide;
+				let pos = new BlockPos(origin.x, origin.y, origin.z);
+				if (game.world.getBlockState(pos).getBlock().material == Materials.air) {
+					placeSide = getPossibleSides(pos);
+					if (!placeSide) {
+						let closestSide, closestPos;
+						let closest = 999;
+						for(let x = -range; x < range; ++x) {
+							for (let z = -range; z < range; ++z) {
+								const newPos = new BlockPos(pos.x + x, pos.y, pos.z + z);
+								const checkNearby = getPossibleSides(newPos);
+								if (checkNearby) {
+									const newDist = player.pos.distanceTo(new Vector3$1(newPos.x, newPos.y, newPos.z));
+									if (newDist <= closest) {
+										closest = newDist;
+										closestSide = checkNearby;
+										closestPos = newPos;
+									}
+								}
+							}
+						}
+
+						if (closestPos) {
+							pos = closestPos;
+							placeSide = closestSide;
+						}
+					}
+				}
+				return {pos, placeSide};
+			}
+
 			let scaffoldtower, oldHeld, scaffoldextend;
 			const scaffold = new Module("Scaffold", function(callback) {
 				if (callback) {
@@ -1500,24 +1599,13 @@ Classic PvP, and OITQ use the new ac, everything else is using the old ac)\`});
 							if (game.world.getBlockState(pos).getBlock().material == Materials.air) {
 								placeSide = getPossibleSides(pos);
 								if (!placeSide) {
-									let closestSide, closestPos;
-									let closest = 999;
-									for(let x = -6; x < 6; ++x) {
-										for (let z = -6; z < 6; ++z) {
-											const newPos = new BlockPos(pos.x + x, pos.y, pos.z + z);
-											const checkNearby = getPossibleSides(newPos);
-											if (checkNearby) {
-												const newDist = player.pos.distanceTo(new Vector3$1(newPos.x, newPos.y, newPos.z));
-												if (newDist <= closest) {
-													closest = newDist;
-													closestSide = checkNearby;
-													closestPos = newPos;
-												}
-											}
-										}
-									}
+									const {pos: closestPos, placeSide: closestSide} = getClosestBlockInRange({
+										x: player.pos.x,
+										y: player.pos.y - 1,
+										z: player.pos.z
+									});
 
-									if (closestPos) {
+									if (closestPos !== undefined && closestSide !== undefined) {
 										pos = closestPos;
 										placeSide = closestSide;
 									}
