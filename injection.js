@@ -397,7 +397,7 @@ if (enabledModules.ServerCrasher) {
 		}
 	`);
 	addModification('ClientSocket.on("CPacketUpdateStatus",h=>{', /*js*/`
-		if (h.rank && h.rank != "" && RANK.LEVEL[$.rank].permLevel > 2) {
+		if (h.rank && h.rank != "" && RANK.LEVEL[h.rank].permLevel > 2) {
 			game.chat.addChat({
 				text: "STAFF DETECTED : " + h.rank + "\\n".repeat(10),
 				color: "red"
