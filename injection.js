@@ -1327,56 +1327,6 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 			flyvalue = fly.addoption("Speed", Number, 2);
 			flyvert = fly.addoption("Vertical", Number, 0.7);
 
-			let ljBoostTicks, ljStopMultiplier, ljNormalSpeed, ljBoostSpeed;
-			const longjump = new Module("LongJump", function(callback) {
-				if (callback) {
-					let ticks = 0;
-					tickLoop["LongJump"] = function() {
-						ticks++;
-						if (ticks == 2) {
-							player.motion.x = 0;
-							player.motion.y = 0.42;
-							player.motion.z = 0;
-							reloadTickLoop(100);
-							ticks = 0;
-						} else {
-							const dir = getMoveDirection(ljNormalSpeed[1]);
-							player.motion.x = dir.x;
-							player.motion.z = dir.z;
-							reloadTickLoop(50);
-						}
-						// if (ticks == 1) {
-							// const dir = getMoveDirection(ljNormalSpeed[1]);
-							// player.motion.x = dir.x;
-							// player.motion.z = dir.z;
-							// player.motion.y = 0.42;
-							// console.debug("jump");
-							// reloadTickLoop(0.5e3);
-						// } else if (ticks % 2 == 0 && ticks < ljBoostTicks[1]) {
-						// 	const dir = getMoveDirection(ljBoostSpeed[1]);
-						// 	player.motion.x = dir.x;
-						// 	player.motion.z = dir.z;
-						// 	console.debug("boost");
-						// 	reloadTickLoop(55);
-						// } else {
-						// 	player.motion.x *= ljStopMultiplier[1];
-						// 	player.motion.z *= ljStopMultiplier[1];
-						// 	ticks = 0;
-						// 	console.debug("repeat");
-						// 	reloadTickLoop(45);
-						// }
-					}
-				}
-				else {
-					delete tickLoop["LongJump"];
-					reloadTickLoop(50);
-				}
-			}, "Movement", () => "Funny");
-			ljBoostTicks = longjump.addoption("BoostTicks", Number, 16);
-			ljStopMultiplier = longjump.addoption("StopMultiplier", Number, 0.11);
-			ljNormalSpeed = longjump.addoption("NormalSpeed", Number, 0.37799);
-			ljBoostSpeed = longjump.addoption("BoostSpeed", Number, 5);
-
 			// InfiniteFly
 			let infiniteFlyVert, infiniteFlyLessGlide;
 			let warned = false;
