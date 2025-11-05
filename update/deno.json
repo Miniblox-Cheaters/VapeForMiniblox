@@ -1,7 +1,17 @@
 {
   "tasks": {
-    "dev": "deno run --watch --allow-read --allow-env --allow-run=git --allow-write update-script.ts",
-    "run": "deno run --allow-read --allow-env --allow-run=git --allow-write update-script.ts"
+    "dev": "deno run --watch -P update-script.ts",
+    "run": "deno run -P update-script.ts"
+  },
+  "permissions": {
+    "default": {
+      "read": true,
+      "env": true,
+      "run": [
+        "git"
+      ],
+      "write": true
+    }
   },
   "imports": {
     "simple-git": "npm:simple-git@^3.27.0",
