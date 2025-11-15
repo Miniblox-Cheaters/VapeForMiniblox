@@ -5,7 +5,7 @@ let replacements = {};
 let dumpedVarNames = {};
 const storeName = "a" + crypto.randomUUID().replaceAll("-", "").substring(16);
 const vapeName = crypto.randomUUID().replaceAll("-", "").substring(16);
-const VERSION = "3.1.0";
+const VERSION = "3.1.1";
 
 // ANTICHEAT HOOK
 function replaceAndCopyFunction(oldFunc, newFunc) {
@@ -99,6 +99,23 @@ function modifyCode(text) {
 	addDump('syncItemDump', 'playerControllerMP\.([a-zA-Z]*)\\(\\),ClientSocket\.sendPacket');
 
 	// PRE
+	addModification("u.serverInfo.permissionLevel>=PermissionLevel.ADMIN", "||adminSpoof.enabled");
+	// I was trying to make stop server work but uh it didn't work, I think they actually check.
+	//addModification("u.serverInfo.permissionLevel===PermissionLevel.OWNER", "||adminSpoof.enabled");
+	addModification(
+		"this.serverInfo.handlePacket(x.serverInfo),",
+		`!enabledModules['AutoPrivate'] ||
+(ClientSocket.sendPacket(new SPacketAdminAction({action: {
+		case: "updateAccessControl",
+		value: {
+			accessControl: "private"
+		}
+}})), toast({
+	title: "Set access control to private!",
+	status: "success"
+})),`
+	);
+
 	addModification('document.addEventListener("DOMContentLoaded",startGame,!1);', `
 		setTimeout(function() {
 			var DOMContentLoaded_event = document.createEvent("Event");
@@ -106,8 +123,13 @@ function modifyCode(text) {
 			document.dispatchEvent(DOMContentLoaded_event);
 		}, 0);
 	`);
-	addModification('y:this.getEntityBoundingBox().min.y,', 'y:sendY != false ? sendY : this.getEntityBoundingBox().min.y,', true);
+	addModification("y:this.getEntityBoundingBox().min.y,", `y: sendY != false
+? sendY
+: enabledModules["AutoClip"]
+	? handleAutoClip(this.pos, this.getEyeHeight(), this.width, this.height)
+: this.getEntityBoundingBox().min.y,`, true);
 	addModification('Potions.jump.getId(),"5");', `
+		let adminSpoof;
 		let blocking = false;
 		let sendYaw = false;
 		let sendY = false;
@@ -367,7 +389,6 @@ if (enabledModules.ServerCrasher) {
 		status: "success",
 		duration: 0.5e3
 	});
-	modules.ServerCrasher.setEnabled(false);
 }
 `)
 	// MUSIC FIX
@@ -863,6 +884,25 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 				return false;
 			}
 
+			function handleAutoClip(pos, eyeHeight, pWidth, pHeight) {
+				const belowVec = pos.clone().sub(new Vector3$1(0, pHeight, 0));
+				const belowPos = BlockPos.fromVector(belowVec);
+				const blockBelow = game.world
+					.getBlock(belowPos);
+				if (blockBelow.name == "air")
+					return;
+				if (!wouldSuffocateAt(
+					belowPos.x, belowPos.y, belowPos.z,
+					eyeHeight, pHeight
+				)) {
+					return belowVec.y - pHeight;
+				}
+				return pos;
+			}
+
+			adminSpoof = new Module("AdminSpoof", function() {}, "Exploit", () => "Ignore");
+			new Module("AutoPrivate", function() {}, "Exploit", () => "Packet");
+
 			new Module("AutoClip", function(callback) {
 				if (callback) {
 					// TODO: pressure plate and etc. checks
@@ -1328,8 +1368,8 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 			flyvert = fly.addoption("Vertical", Number, 0.7);
 
 			// InfiniteFly
-			let infiniteFlyVert, infiniteFlyLessGlide;
-			let warned = false;
+			let infiniteFlyVert, infiniteFlyLessGlide, infiniteFlySpeed;
+			let warned = false, yLimitWarning = false;
 			const infiniteFly = new Module("InfiniteFly", function(callback) {
 				if (callback) {
 					if (!warned) {
@@ -1341,9 +1381,20 @@ Classic PvP, and OITQ use the new ac, everything else is using the old ac)\`});
 					}
 					let ticks = 0;
 					tickLoop["InfiniteFly"] = function() {
+						// literal equivalent of going up to Y 255 on Bloxd
+						// (your Y pos would be set to 0 and your motion would persist)
+						// ... at least when the translation layer wasn't patched and their old ac was there
+						// (you could LowHop, Fly, and etc., kb also exempted you for like 5 seconds)
+						if (Math.abs(210 - player.pos.y) <= 50 && !yLimitWarning) {
+							game.chat.addChat({
+								text: "Miniblox's ac will setback you to ground if you go up to ~210 on the Y axis and move horizontally",
+								color: "yellow"
+							});
+							yLimitWarning = true;
+						}
 						sendGround = undefined;
 						ticks++;
-						const dir = getMoveDirection(0.37799);
+						const dir = getMoveDirection(infiniteFlySpeed[1]);
 						player.motion.x = dir.x;
 						player.motion.z = dir.z;
 						const goUp = keyPressedDump("space");
@@ -1362,6 +1413,7 @@ Classic PvP, and OITQ use the new ac, everything else is using the old ac)\`});
 				}
 				else {
 					delete tickLoop["InfiniteFly"];
+					if (player === undefined) return;
 					if (!infiniteFlyLessGlide[1]) return;
 					// due to us not constantly applying the motion y while flying,
 					// we can't instantly stop.
@@ -1369,6 +1421,11 @@ Classic PvP, and OITQ use the new ac, everything else is using the old ac)\`});
 					let ticks = 0;
 					tickLoop["InfiniteFlyStop"] = function() {
 						if (player && ticks < 4) {
+							if (ticks === 2) { // last tick
+								player.motion.x = 0;
+								player.motion.z = 0;
+								game.chat.addChat({text: "Stop lol"});
+							}
 							player.motion.y = 0.18;
 							ticks++;
 						} else {
@@ -1379,6 +1436,7 @@ Classic PvP, and OITQ use the new ac, everything else is using the old ac)\`});
 			}, "Movement",  () => \`V \${infiniteFlyVert[1]} \${infiniteFlyLessGlide[1] ? "LessGlide" : "MoreGlide"}\`);
 			infiniteFlyVert = infiniteFly.addoption("Vertical", Number, 0.3);
 			infiniteFlyLessGlide = infiniteFly.addoption("LessGlide", Boolean, true);
+			infiniteFlySpeed = infiniteFly.addoption("Speed", Number, 0.394);
 
 			new Module("InvWalk", function() {}, "Player", () => "Ignore");
 			new Module("KeepSprint", function() {}, "Movement", () => "Ignore");
