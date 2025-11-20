@@ -3,6 +3,7 @@
 // @namespace    http://7granddadpgn.github.io
 // @version      3.1.2
 // @description  A browser script made to give enhancements on Miniblox
+// @license      AGPL-3.0-or-later
 // @author       7GrandDad
 // @match        https://miniblox.io/*
 // @match        https://miniblox.org/*
