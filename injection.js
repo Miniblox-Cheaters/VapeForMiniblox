@@ -128,11 +128,17 @@ function modifyCode(text) {
 : enabledModules["AutoClip"]
 	? handleAutoClip(this.pos, this.getEyeHeight(), this.width, this.height)
 : this.getEntityBoundingBox().min.y,`, true);
+	addModification("const player=new ClientEntityPlayer", `
+// note: when using desync,
+// your position will only update every 20 ticks.
+let serverPos = player.pos.clone();
+`);
 	addModification('Potions.jump.getId(),"5");', `
 		let adminSpoof;
 		let blocking = false;
 		let sendYaw = false;
 		let sendY = false;
+		let desync = false;
 		let sendGround;
 		let breakStart = Date.now();
 		let noMove = Date.now();
@@ -155,6 +161,24 @@ function modifyCode(text) {
 		let useAccountGen, accountGenEndpoint
 		let attackTime = Date.now();
 		let chatDelay = Date.now();
+
+		/**
+		 * clamps the given position to the given range
+		 * @param {Vector3} pos
+		 * @param {Vector3} serverPos
+		 * @param {number} range
+		 * @returns {Vector3} the clamped position
+		**/
+		function desyncMath(pos, serverPos, range) {
+			const moveVec = {x: (pos.x - serverPos.x), y: (pos.y - serverPos.y), z: (pos.z - serverPos.z)};
+			const moveMag = Math.sqrt(moveVec.x * moveVec.x + moveVec.y * moveVec.y + moveVec.z * moveVec.z);
+
+			return moveMag > range ? {
+				x: serverPos.x + ((moveVec.x / moveMag) * range),
+				y: serverPos.y + ((moveVec.y / moveMag) * range),
+				z: serverPos.z + ((moveVec.z / moveMag) * range)
+			} : pos;
+		}
 
 		async function generateAccount() {
 			toast({
@@ -488,6 +512,16 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 	addModification('S&&!this.isUsingItem()', 'S&&!(this.isUsingItem() && !enabledModules["NoSlowdown"])', true);
 	// TODO: fix this
 	// addModification('0),this.sneak', ' && !enabledModules["NoSlowdown"]');
+
+	// DESYNC
+	addModification("this.inputSequenceNumber++", 'desync ? this.inputSequenceNumber : this.inputSequenceNumber++', true);
+	// addModification("new PBVector3({x:this.pos.x,y:this.pos.y,z:this.pos.z})", "desync ? inputPos : inputPos = this.pos", true);
+
+	// auto-reset desync variable.
+	addModification("reconcileServerPosition(h){", "serverPos = h;");
+
+	// hook into reconcileServerPosition
+	// so we know our server pos
 
 	// GROUND SPOOF
 	addModification('={onGround:this.onGround}', '={onGround:sendGround !== undefined ? sendGround : this.onGround}', true);
@@ -968,17 +1002,22 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 
 			// NoFall
 			new Module("NoFall", function(callback) {
-				if (callback) {
-					let ticks = 0;
-					tickLoop["NoFall"] = function() {
+				if (!callback) {
+					delete tickLoop["NoFall"];
+					desync = false;
+					return;
+				}
+				tickLoop["NoFall"] = function() {
+					if (player.fallDistance >= 2.5) {
         				const ray = rayTraceBlocks(player.getEyePos(), player.getEyePos().clone().setY(0), false, false, false, game.world);
-						if (player.fallDistance > 2.5 && ray) {
+						if (ray) {
 							ClientSocket.sendPacket(new SPacketPlayerPosLook({pos: {x: player.pos.x, y: ray.hitVec.y, z: player.pos.z}, onGround: true}));
 							player.fallDistance = 0;
 						}
-					};
-				}
-				else delete tickLoop["NoFall"];
+						if (player.motionY < -0.6)
+							desync = true;
+					}
+				};
 			}, "Player");
 
 			// WTap
@@ -1345,24 +1384,23 @@ h.addVelocity(-Math.sin(this.yaw) * g * .5, .1, -Math.cos(this.yaw) * g * .5);
 			// Fly
 			let flyvalue, flyvert, flybypass;
 			const fly = new Module("Fly", function(callback) {
-				if (callback) {
-					let ticks = 0;
-					tickLoop["Fly"] = function() {
-						ticks++;
-						const dir = getMoveDirection(flyvalue[1]);
-						player.motion.x = dir.x;
-						player.motion.z = dir.z;
-						player.motion.y = keyPressedDump("space") ? flyvert[1] : (keyPressedDump("shift") ? -flyvert[1] : 0);
-					};
-				}
-				else {
-					delete tickLoop["Fly"];
+				if (!callback) {
 					if (player) {
 						player.motion.x = Math.max(Math.min(player.motion.x, 0.3), -0.3);
 						player.motion.z = Math.max(Math.min(player.motion.z, 0.3), -0.3);
 					}
+					delete tickLoop["Fly"];
+					desync = false;
+					return;
 				}
-			}, "Movement", () => \`\${flyvalue[1]} b/t \${flyvert[1]} b/t V\`);
+				desync = true;
+				tickLoop["Fly"] = function() {
+					const dir = getMoveDirection(flyvalue[1]);
+					player.motion.x = dir.x;
+					player.motion.z = dir.z;
+					player.motion.y = keyPressedDump("space") ? flyvert[1] : (keyPressedDump("shift") ? -flyvert[1] : 0);
+				};
+			});
 			flybypass = fly.addoption("Bypass", Boolean, true);
 			flyvalue = fly.addoption("Speed", Number, 2);
 			flyvert = fly.addoption("Vertical", Number, 0.7);
